@@ -93,6 +93,18 @@ def create_word_report_tryexcept(title, stats_table_png_path, overview_paths, sc
         except Exception as e:
             print(f"Fehler beim Hinzufügen von Überblick-Plot 3 (Balken-Plot) {overview_paths[2]}: {e}")
 
+
+    # Overview Plot 4 (Success Chance all Series)
+    if overview_paths and len(overview_paths) > 3:
+        try:
+            if os.path.exists(overview_paths[3]):
+                document.add_picture(overview_paths[3], width=Inches(6)) # , width=Inches(6), height=Inches(4))
+                document.add_paragraph("Der Line-Plot zeigt die Erfolgsquote mit dem Durchschnitt aller Serien, verglichen mit der ZAP-Prüfung.")
+                if remove_files:
+                    os.remove(overview_paths[3])
+        except Exception as e:
+            print(f"Fehler beim Hinzufügen von Überblick-Plot 3 (Balken-Plot) {overview_paths[2]}: {e}")
+
     document.add_page_break()
 
     # 2. Serien einzeln
@@ -266,6 +278,7 @@ def create_word_report_tryexcept_glc(title, stats_table_png_path, overview_paths
                     os.remove(overview_paths[2])
         except Exception as e:
             print(f"Fehler beim Hinzufügen von Überblick-Plot 3 (Balken-Plot) {overview_paths[2]}: {e}")
+
     
     document.add_page_break()
     

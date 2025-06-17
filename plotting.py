@@ -989,6 +989,12 @@ def generate_plots_tryexcept(df, sn, en, xtic, x_labels_lineplot, show_fig=False
         create_pass_fail_bar_plot(df, threshold=4.5, serien=sn, en=en, fig_name=f"{fach.lower()}_pass_fail_bar_plot.png")
     except Exception as e:
         print(f"Warning: Failed to create pass/fail bar plot ({fach.lower()}_pass_fail_bar_plot.png). Error: {e}")
+    
+    try:
+        plot_success_chance(df, "SPall", "Durchschnitt", final_exam_col=en, final_pass_threshold=4.5,
+                            fig_name=f"{fach.lower()}_all_success_chance.png", show_fig=show_fig)
+    except Exception as e:
+        print(f"Warning: Failed to success chance plot (all_success_chance.png). Error: {e}")
 
     for i, s in enumerate(sn):
         df[f"{s}_{en}_good"] = np.where(df[en] >= 4.5, df[f"{s}_{en}"], np.nan)
