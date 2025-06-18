@@ -31,6 +31,65 @@ def clean_data(data):
 
 
 
+def calculate_grade(percentage_score, percent_for_grade_1, percent_for_grade_6, round_to_decimal_places=2):
+    """
+    Calculates a grade on a 1-6 scale based on a percentage score and specified
+    thresholds for grade 1 and grade 6.
+
+    The grading is linear between the grade 1 and grade 6 thresholds.
+    Scores below the grade 1 threshold receive grade 1.
+    Scores above the grade 6 threshold receive grade 6.
+
+    Args:
+        percentage_score (float or int): The student's score as a percentage (e.g., 75 for 75%).
+        percent_for_grade_1 (float or int): The percentage score that corresponds to Grade 1.
+                                            Must be less than percent_for_grade_6.
+        percent_for_grade_6 (float or int): The percentage score that corresponds to Grade 6.
+                                            Must be greater than percent_for_grade_1.
+        round_to_decimal_places (int, optional): The number of decimal places to round the
+                                                 calculated grade to. Defaults to 2.
+                                                 Set to None for no rounding.
+
+    Returns:
+        float: The calculated grade, clamped between 1 and 6, and optionally rounded.
+               Returns None if input thresholds are invalid.
+    """
+    if not (0 <= percent_for_grade_1 < percent_for_grade_6 <= 100):
+        print("Error: 'percent_for_grade_1' must be less than 'percent_for_grade_6', "
+              "and both must be between 0 and 100.")
+        return None
+
+    # Convert percentages to decimals for calculation
+    p_grade_1 = percent_for_grade_1 / 100.0
+    p_grade_6 = percent_for_grade_6 / 100.0
+    p_score_decimal = percentage_score / 100.0
+
+    # Define the grade range
+    min_grade = 1.0
+    max_grade = 6.0
+
+    # Handle scores outside the defined linear range
+    if p_score_decimal <= p_grade_1:
+        calculated_grade = min_grade
+    elif p_score_decimal >= p_grade_6:
+        calculated_grade = max_grade
+    else:
+        # Calculate slope (m)
+        # m = (change in grade) / (change in percentage)
+        m = (max_grade - min_grade) / (p_grade_6 - p_grade_1)
+
+        # Calculate y-intercept (b)
+        # Using G = mP + b => b = G - mP
+        b = min_grade - m * p_grade_1
+
+        # Calculate the grade using the linear equation
+        calculated_grade = m * p_score_decimal + b
+
+    if round_to_decimal_places is not None:
+        return round(calculated_grade, round_to_decimal_places)
+    else:
+        return calculated_grade   
+
 
 
 def plot_scatter_trend(
@@ -174,7 +233,6 @@ def plot_correlation_heatmap(df, column_names):
 
 
 
-
 def calc_stats_table(df, df_names, sn, en):
 
     columns = [en] + sn
@@ -260,7 +318,7 @@ def calc_stats_table(df, df_names, sn, en):
 
 
 
-def calc_stats_table_glc(df, df_names, sn, en):
+def calc_stats_table_glc(df, df_names, sn, en, percent_for_grade_1, percent_for_grade_6):
 
     columns = [en] + sn
     df = df[columns].copy()        
@@ -269,7 +327,7 @@ def calc_stats_table_glc(df, df_names, sn, en):
         if col.startswith("GLC"):
             df[col] = df[col].astype(str).str.replace('%', '', regex=False)
             df[col] = pd.to_numeric((df[col]), errors='coerce')
-            df[col] = df[col]/100
+            df[col] = df[col].apply(lambda x: calculate_grade(x, percent_for_grade_1, percent_for_grade_6) if pd.notna(x) else np.nan)
         else:
             df[col] = pd.to_numeric(df[col], errors='coerce')
             df[col].mask(df[col] < 1, np.nan, inplace=True)
@@ -282,13 +340,13 @@ def calc_stats_table_glc(df, df_names, sn, en):
         df_order[name1] = np.where(np.isnan(df[en]), np.nan, df[s])
         df_order[name2] = np.where(np.isnan(df[s]), np.nan, df[en])
         if s.startswith("GLC"):
-            df_names[s] = f"Prüfungsnote GLC {en[-1]} (Alle SuS)"
-            df_names[name1] = f"Prüfungsnote GLC {en[-1]} (SuS mit Erfolgsnote)"
-            df_names[name2] = f"Erfolgsnote ZAP (SuS mit GLC)"
+            df_names[s] = f"PN GLC {en[-1]} (Alle SuS)"
+            df_names[name1] = f"PN GLC {en[-1]} (SuS mit EN)"
+            df_names[name2] = f"EN ZAP (SuS mit GLC)"
         else:
-            df_names[s] = f"Prüfungsnote SimPr {en[-1]} (Alle SuS Serie {i+1})"
-            df_names[name1] = f"Prüfungsnote SimPr {en[-1]} (SuS mit Erfolgsnot Serie {i+1})"
-            df_names[name2] = f"Erfolgsnote ZAP (SuS mit Note in Serie {i+1})"
+            df_names[s] = f"PN SimPr {en[-1]} (Alle SuS Serie {i+1})"
+            df_names[name1] = f"PN SimPr {en[-1]} (SuS mit Erfolgsnot Serie {i+1})"
+            df_names[name2] = f"EN ZAP (SuS mit Note in Serie {i+1})"
 
 
     # Add an column for all series
@@ -302,7 +360,7 @@ def calc_stats_table_glc(df, df_names, sn, en):
         df_order[en_all] = np.where(np.isnan(df_order["SPall"]), np.nan, df[en])
         df_names[en_all] = "Erfolgsnote ZAP (SuS mit Note in einer der Serien)"
     
-    df_names[en] = f"Erfolgsnote {en}"
+    df_names[en] = f"EN {en}"
 
     df_order[en] = df[en]
 
@@ -312,23 +370,25 @@ def calc_stats_table_glc(df, df_names, sn, en):
     df_stats.rename(index={'count': 'n', 'mean': 'Average', 'min': 'Minimum', 'max': 'Maximum'}, inplace=True)
 
     for col in df_order.columns:
+        """
         if col.startswith("GLC"):
             df_stats.loc['n bestanden (>= 0.5)', col] = (df_order[col] >= 0.5).sum()
             df_stats.loc['% bestanden (>= 0.5)', col] = (df_order[col] >= 0.5).sum() / df_order[col].count() * 100
             df_stats.loc['% bestanden (>= 0.5)', col] = f"{df_stats.loc['% bestanden (>= 0.5)', col]:.2f}%"
         else:
-            df_stats.loc['n bestanden (>= 4.5)', col] = (df_order[col] >= 4.5).sum()
-            df_stats.loc['% bestanden (>= 4.5)', col] = (df_order[col] >= 4.5).sum() / df_order[col].count() * 100
-            df_stats.loc['% bestanden (>= 4.5)', col] = f"{df_stats.loc['% bestanden (>= 4.5)', col]:.2f}%"
+        """    
+        df_stats.loc['n bestanden (>= 4.5)', col] = (df_order[col] >= 4.5).sum()
+        df_stats.loc['% bestanden (>= 4.5)', col] = (df_order[col] >= 4.5).sum() / df_order[col].count() * 100
+        df_stats.loc['% bestanden (>= 4.5)', col] = f"{df_stats.loc['% bestanden (>= 4.5)', col]:.2f}%"
 
 
     sel_col = [col for col in df_order.columns if col.endswith(f"_{en}")]
     for col in sel_col:
         if col.startswith("GLC"):
-            df_stats.loc['n Verbesserung', col] = (df_order[col]*6 < df_order[en]).sum()
-            df_stats.loc['% Verbesserung', col] = (df_order[col]*6 < df_order[en]).sum() / df_order[col].count() * 100
+            df_stats.loc['n Verbesserung', col] = (df_order[col] < df_order[en]).sum()
+            df_stats.loc['% Verbesserung', col] = (df_order[col] < df_order[en]).sum() / df_order[col].count() * 100
             df_stats.loc['% Verbesserung', col] = f"{df_stats.loc['% Verbesserung', col]:.2f}%"
-            df_stats.loc['Durchschn. Verbesserung', col] = (df_order[en] - df_order[col]*6).mean()
+            df_stats.loc['Durchschn. Verbesserung', col] = (df_order[en] - df_order[col]).mean()
             df_stats.loc['r Korrelation', col] = df_order[col].corr(df_order[en])
         else:
             df_stats.loc['n Verbesserung', col] = (df_order[col] < df_order[en]).sum()
@@ -340,10 +400,12 @@ def calc_stats_table_glc(df, df_names, sn, en):
 
 
     # Convert these rows to integer type
+    """
     if s.startswith("GLC"):
         count_rows = ['n', 'n bestanden (>= 0.5)', 'n Verbesserung']
     else:
-        count_rows = ['n', 'n bestanden (>= 4.5)', 'n Verbesserung']
+    """
+    count_rows = ['n', 'n bestanden (>= 4.5)', 'n Verbesserung']
     for row in count_rows:
         df_stats.loc[row] = df_stats.loc[row].astype(int, errors='ignore')
 
@@ -393,9 +455,10 @@ def create_line_plot(df, serien, en, fig_name, x_labels = ['Serie 1', 'Serie 2',
     df_en = df[s_en].copy()
     df_en = df_en.iloc[:, 0:len(serien)]  # Ensure it has the same number of series as df_s
     df_en.rename(columns={0: 'Serie 1', 1: 'Serie 2', 2: 'Serie 3', 3: 'Serie 4', 4: 'Serie 5'}, inplace=True)
+    """
     if serien[0].startswith("GLC"):
         df_en = df_en/6
-
+    """
     y_s = df_s.mean()
     s_err = df_s.std()
     y_sen = df_sen.mean()
@@ -469,8 +532,10 @@ def create_violin_plot(df, serien, en, xtic, fig_name):
     df_en = df_filtered[s_en].copy()
     df_en = df_en.iloc[:, :len(serien)]
     df_en = df_en.rename(columns={i: f'Serie {i+1}' for i in range(len(serien))})
+    """
     if serien[0].startswith("GLC"):
         df_en = df_en/6
+    """
     df_en_melted = df_en.melt(var_name='Serie', value_name='Note')
     df_en_melted['Gruppe'] = 'ZAP Note'
 
@@ -534,8 +599,10 @@ def create_pass_fail_bar_plot(df, threshold, serien, en, fig_name):
     df_sen = df_temp[[col for col in df.columns if any(s in col for s in serien) and "_ZAP" in col] + [en]].copy()
     df_sen.rename(columns={df_sen.columns[i]: f'Serie {i+1}' if i < len(serien) else 'Erfolgsnote' for i in range(len(df_sen.columns))}, inplace=True)
     df_en = df[[col for col in df.columns if col.startswith("ZAP") and not any(s in col for s in ['all', '_ZAP'])]].copy()
+    """
     if serien[0].startswith("GLC"):
         df_en = df_en/6
+    """
     df_en.rename(columns={df_en.columns[i]: f'Serie {i+1}' if i < len(serien) else 'Erfolgsnote' for i in range(len(df_en.columns))}, inplace=True)
 
     df_s = df_s.iloc[:, 0:len(serien)]
@@ -643,7 +710,7 @@ def calc_corr_table(df, df_names, ex_prefix, sn, en):
 
 
 
-def calc_corr_table_glc(df, df_names, ex_prefix, sn, en):
+def calc_corr_table_glc(df, df_names, ex_prefix, sn, en, percent_for_grade_1, percent_for_grade_6):
     """
     Calculates the correlation table for a DataFrame and returns a styled DataFrame.
     Args:
@@ -662,7 +729,7 @@ def calc_corr_table_glc(df, df_names, ex_prefix, sn, en):
         if col.startswith("GLC"):
             df_corr[col] = df_corr[col].astype(str).str.replace('%', '', regex=False)  # Apply .str to the column
             df_corr[col] = pd.to_numeric(df_corr[col], errors='coerce')
-            df_corr[col] = df_corr[col]/100
+            df_corr[col] = df_corr[col].apply(lambda x: calculate_grade(x, percent_for_grade_1, percent_for_grade_6) if pd.notna(x) else np.nan)
         else:
             df_corr[col] = pd.to_numeric(df_corr[col], errors='coerce')
             df_corr[col] = df_corr[col].mask(df_corr[col] < 1, np.nan) # corrected mask
@@ -691,11 +758,6 @@ def calc_corr_table_glc(df, df_names, ex_prefix, sn, en):
 
 
 
-
-
-
-
-
 def plot_histograms(df, serie, serie_en, serie_en_good, hist_title, title_en, title_good, title_all, fig_name, show_fig=False):
     plt.figure(figsize=(10, 6))
     plt.hist(df[serie], range=[1, 6], histtype='barstacked', color='#4c72b0', alpha=1, label=title_all)
@@ -718,13 +780,13 @@ def plot_histograms(df, serie, serie_en, serie_en_good, hist_title, title_en, ti
 
 def plot_histograms_glc(df, serie, serie_en, serie_en_good, hist_title, title_en, title_good, title_all, fig_name, show_fig=False):
     plt.figure(figsize=(10, 6))
-    plt.hist(df[serie], range=[0, 1], histtype='barstacked', color='#4c72b0', alpha=1, label=title_all)
-    plt.hist(df[serie_en], range=[0, 1], histtype='barstacked', color='#55a868', alpha=0.7, label=title_en)
-    plt.hist(df[serie_en_good], range=[0, 1], histtype='barstacked', color='#81a8ca', alpha=0.7, label=title_good)
+    plt.hist(df[serie], range=[1, 6], histtype='barstacked', color='#4c72b0', alpha=1, label=title_all)
+    plt.hist(df[serie_en], range=[1, 6], histtype='barstacked', color='#55a868', alpha=0.7, label=title_en)
+    plt.hist(df[serie_en_good], range=[1, 6], histtype='barstacked', color='#81a8ca', alpha=0.7, label=title_good)
     plt.title(hist_title)
     plt.xlabel('Note')
     plt.ylabel('Anzahl')
-    plt.xlim(0, 1)
+    plt.xlim(1, 6)
     N = len(df[serie].dropna())
     plt.text(0.05, 0.95, f'N={N}', transform=plt.gca().transAxes, fontsize=9, 
              verticalalignment='top', bbox=dict(boxstyle='round,pad=0.5', fc='wheat', alpha=0.7))
@@ -791,7 +853,7 @@ def plot_success_chance(df, sim_exam_col, serie_nr, final_exam_col, final_pass_t
     # Create the line plot with variability area
     plt.figure(figsize=(10, 6))
     plt.plot(bin_centers, grouped['mean'], marker='o', label='Bestehensquote')
-    plt.fill_between(bin_centers, lower_bound, upper_bound, alpha=0.3, label=f'Variability ({y_label_variability})')
+    plt.fill_between(bin_centers, lower_bound, upper_bound, alpha=0.2, label=f'Variability ({y_label_variability})')
 
     # --- Add N to the plot ---
     for i, N in enumerate(grouped['count']):
@@ -804,8 +866,12 @@ def plot_success_chance(df, sim_exam_col, serie_nr, final_exam_col, final_pass_t
     z = np.polyfit(bin_centers, grouped['mean'], 1) # 1 for a linear trendline
     p = np.poly1d(z)
 
+    z_weighted = np.polyfit(bin_centers, grouped['mean'], 1, w=grouped['count']) # w is the weight
+    p_weighted = np.poly1d(z_weighted)
+
     # Plot the trendline
-    plt.plot(bin_centers, p(bin_centers), "r--", label='Trendline') # Red dashed line for the trend
+    plt.plot(bin_centers, p(bin_centers), "r--", label='Unweighted Trendline') # Red dashed line for the trend
+    plt.plot(bin_centers, p_weighted(bin_centers), "g--", label='Weighted Trendline') # Green dashed line for weighted trend
     # -------------------
 
     # Add labels and title
@@ -827,7 +893,103 @@ def plot_success_chance(df, sim_exam_col, serie_nr, final_exam_col, final_pass_t
 
 
 
-def plot_success_chance_glc(df, sim_exam_col, final_exam_col, final_pass_threshold, fig_name='success_chance.png', bin_size=0.1, variability='stderr', show_fig=False):
+def plot_success_chance_glc(df, sim_exam_col, final_exam_col, final_pass_threshold, fig_name='success_chance.png', bin_size=0.5, variability='stderr', show_fig=False):
+    """
+    Visualizes the chance of succeeding in the final exam based on the simulation exam grade,
+    with grades grouped into bins to smooth the curve and an area showing variability.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing simulation exam grades and final exam results.
+        sim_exam_col (str): Name of the column containing simulation exam grades.
+        final_exam_col (str): Name of the column containing final exam grades.
+        final_pass_threshold (float): The passing grade threshold for the final exam.
+        sim_pass_threshold (float, optional): The passing grade threshold for the simulation exam.
+                                              If provided, a vertical line will be added to the plot.
+        bin_size (float): The size of the grade bins for grouping.
+        variability (str): The measure of variability to show ('stderr' for standard error,
+                           'std' for standard deviation). Defaults to 'stderr'.
+    """
+
+    df = df.dropna(subset=[final_exam_col]).copy() # .copy() to avoid SettingWithCopyWarning
+
+    # Create a binary 'Passed Final' column
+    df['Passed Final'] = df[final_exam_col] >= final_pass_threshold
+
+    # Create bins for the simulation exam grades
+    # min_grade = math.floor(df[sim_exam_col].min())
+    min_grade = 1
+    # max_grade = math.ceil(df[sim_exam_col].max())
+    max_grade = 6
+    
+    custom_bins = np.arange(min_grade, max_grade + bin_size, bin_size)
+    custom_bins[-1] += np.finfo(float).eps
+    bins = pd.cut(df[sim_exam_col], bins=custom_bins, include_lowest=True, right=False)
+
+
+    #bins = pd.cut(df[sim_exam_col], bins=pd.interval_range(start=min_grade, end=max_grade, freq=bin_size), include_lowest=True, right=False)
+
+    # Calculate the probability of passing and variability for each bin
+    grouped = df.groupby(bins)['Passed Final'].agg(['mean', 'sem', 'std', 'count']).reset_index()
+    grouped = grouped.dropna(subset=['mean'])
+
+    bin_centers = [(interval.left + interval.right) / 2 for interval in grouped[sim_exam_col]]
+
+    # Determine the upper and lower bounds for the variability area
+    if variability == 'stderr':
+        upper_bound = grouped['mean'] + grouped['sem']
+        lower_bound = grouped['mean'] - grouped['sem']
+        y_label_variability = 'Standard Error'
+    elif variability == 'std':
+        upper_bound = grouped['mean'] + grouped['std']
+        lower_bound = grouped['mean'] - grouped['std']
+        y_label_variability = 'Standard Deviation'
+    else:
+        raise ValueError("Invalid value for 'variability'. Choose 'stderr' or 'std'.")
+
+    # Create the line plot with variability area
+    plt.figure(figsize=(10, 6))
+    plt.plot(bin_centers, grouped['mean'], marker='o', label='Bestehensquote')
+    plt.fill_between(bin_centers, lower_bound, upper_bound, alpha=0.2, label=f'Variability ({y_label_variability})')
+
+    # --- Add N to the plot ---
+    for i, N in enumerate(grouped['count']):
+        plt.text(bin_centers[i], grouped['mean'].iloc[i]+0.03, f'N={int(N)}', ha='center', va='bottom', fontsize=9, color='black')
+    # -------------------------
+
+    # --- Add Trendline ---
+    # Calculate the trendline (e.g., a linear fit)
+    # You can change the degree of the polynomial (e.g., 2 for quadratic)
+    z = np.polyfit(bin_centers, grouped['mean'], 1) # 1 for a linear trendline
+    p = np.poly1d(z)
+
+    z_weighted = np.polyfit(bin_centers, grouped['mean'], 1, w=grouped['count']) # w is the weight
+    p_weighted = np.poly1d(z_weighted)
+
+    # Plot the trendline
+    plt.plot(bin_centers, p(bin_centers), "r--", label='Unweighted Trendline') # Red dashed line for the trend
+    plt.plot(bin_centers, p_weighted(bin_centers), "g--", label='Weighted Trendline') # Green dashed line for weighted trend
+    # -------------------
+
+    # Add labels and title
+    plt.xlabel(f"GLC Prüfung \n"
+               f"(Bestanden: EN >= {final_pass_threshold}, bucket-size: {bin_size})")
+    plt.ylabel("Bestehensquote in der ZAP Prüfung")
+    plt.title("Erfolgsquote in der ZAP Prüfung basierend auf dem GLC")
+    plt.grid(True, which='both')
+    plt.ylim(0, 1.05) # Set y-axis limits for probability
+    N = sum(grouped['count'])
+    plt.text(0.05, 0.95, f'N={N}', transform=plt.gca().transAxes, fontsize=9, 
+             verticalalignment='top', bbox=dict(boxstyle='round,pad=0.5', fc='wheat', alpha=0.7))
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(fig_name, dpi=300, bbox_inches='tight')  # Save the figure as a PNG file
+    if show_fig:
+        plt.show()
+
+
+
+def plot_success_chance_glc_old(df, sim_exam_col, final_exam_col, final_pass_threshold, fig_name='success_chance.png', bin_size=0.1, variability='stderr', show_fig=False):
     """
     Visualizes the chance of succeeding in the final exam based on the simulation exam grade,
     with grades grouped into bins to smooth the curve and an area showing variability.
@@ -1023,7 +1185,7 @@ def generate_plots_tryexcept(df, sn, en, xtic, x_labels_lineplot, show_fig=False
             except Exception as e:
                 print(f"Warning: Failed to create success chance plot for {s}. Error: {e}")
 
-        else: # For other series (presumably SimPr)
+        else:
             try:
                 plot_scatter_trend(x_data=df[s], y_data=df[en], dot_size=30, show_regression_line=True, x_label="Prüfungsnote", y_label="Erfolgsnote",
                                    title=f"Prüfungsnote SimPr {fach} Serie {i+1} vs. {en}", fig_name=f"{fach.lower()}_simpr{i+1}_vs_{en.lower()}.png", show_fig=show_fig)

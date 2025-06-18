@@ -195,7 +195,8 @@ def create_word_report_tryexcept(title, stats_table_png_path, overview_paths, sc
 
 
 
-def create_word_report_tryexcept_glc(title, stats_table_png_path, overview_paths, scatter_plot_paths, histogram_paths, success_paths, corr_table_paths, output_filename="report.docx", remove_files=False):
+def create_word_report_tryexcept_glc(title, stats_table_png_path, overview_paths, scatter_plot_paths, histogram_paths, success_paths, corr_table_paths, 
+                                     output_filename="report.docx", percent_for_grade_1=0, percent_for_grade_6=90, remove_files=False):
     """
     Generates a Word report from PNG image paths, handling separate paths for different plot types.
 
@@ -217,8 +218,9 @@ def create_word_report_tryexcept_glc(title, stats_table_png_path, overview_paths
     # 1. Stats Table
     document.add_heading("Statistische Zusammenfassung", level=2)
     document.add_paragraph("Auswertung der GLC Prüfungsdaten von der Saison 24/25. Eine Prüfung gilt als bestanden, wenn " \
-                            "in der ZAP-Prüfung mindestens eine 4.5 geschrieben wurde. Um die GLC Prüfung mit der ZAP Prüfung zu vergleichen, " \
-                            "wurde die GLC Prüfung mit 6 multipliziert, so haben wir die gleiche Skala für beide Prüfungen.")
+                            "in der ZAP-Prüfung mindestens eine 4.5 geschrieben wurde. Für die GLC Prüfung wurde eine Notenskala eingeführt," \
+                            "wobei die 1 und die 6 festgesetzt werden und die Note dazwischen linear steigt. " \
+                            f"Für diesen GLC wurde die Note 1 bei {percent_for_grade_1}% und die Note 6 bei {percent_for_grade_6}% gesetzt")
 
     try:
         if os.path.exists(stats_table_png_path):
@@ -230,6 +232,11 @@ def create_word_report_tryexcept_glc(title, stats_table_png_path, overview_paths
                 os.remove(stats_table_png_path)
     except Exception as e:
         print(f"Fehler beim Hinzufügen der Statistik-Tabelle {stats_table_png_path}: {e}")
+
+    
+    document.add_paragraph("Legende:")
+    document.add_paragraph(f"PN = Prüfungsnote", style='List Bullet')
+    document.add_paragraph(f"EN = Erfolgsnote", style='List Bullet')
 
     document.add_page_break()
 
